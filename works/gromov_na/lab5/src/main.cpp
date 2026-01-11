@@ -331,15 +331,12 @@ public:
             {
                 throw std::runtime_error("unexpected cls_logits dims (expected [1,a,c] or [a,c])");
             }
-            // проверка размеров bbox (ожидаем последнюю размерность == 4)
-            int bboxLast = (boxDims.nbDims > 0) ? boxDims.d[boxDims.nbDims - 1] : -1;
-            if (bboxLast != 4)
-            {
-                std::cerr << "[warn] unexpected bbox_regression last dim: " << bboxLast << " (expected 4)\n";
-            }
+
             // gpu постпроцесс: decode + фильтр + сортировка + nms (topk)
+            // используем стандартную пост-обработку для обеих моделей
             const int maxCandidates = 6000;
             const int topK = 1500;
+
             detections = retinanet_postprocess_gpu(
                 (const float *)buffers[boxesIndex],
                 (const float *)buffers[scoresIndex],
@@ -349,10 +346,13 @@ public:
                 confThreshold,
                 0.5f,
                 maxCandidates,
-                topK);
+                topK,
+                stream); // передаем поток детектора для синхронизации
+
+            // если нет детекций, просто продолжаем с пустым вектором
             if (detections.empty())
             {
-                throw std::runtime_error("gpu postprocess returned 0 detections (gpu-only build: no cpu fallback).");
+                std::cout << "[info] no detections found for current frame with confidence threshold " << confThreshold << std::endl;
             }
         }
         delete[] hostInputBuffer;
@@ -617,6 +617,7 @@ int main(int argc, char **argv)
                 return 1;
             }
             std::cout << "done! result saved to " << outputPath << std::endl;
+            cleanup_postprocess_stream();
             return 0;
         }
         cv::VideoCapture cap(inputPath);
@@ -686,11 +687,14 @@ int main(int argc, char **argv)
                       << (int)d.bbox[0] << ", " << (int)d.bbox[1] << ", "
                       << (int)d.bbox[2] << ", " << (int)d.bbox[3] << "]" << std::endl;
         }
+        cleanup_postprocess_stream();
     }
     catch (const std::exception &e)
     {
         std::cerr << "error: " << e.what() << std::endl;
+        cleanup_postprocess_stream();
         return 1;
     }
+    cleanup_postprocess_stream();
     return 0;
 }

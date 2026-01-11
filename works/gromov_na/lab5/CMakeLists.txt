@@ -27,7 +27,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
-    src/postprocess_gpu.cu
+    src/postprocess.cu
 )
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY CUDA_ARCHITECTURES 75)

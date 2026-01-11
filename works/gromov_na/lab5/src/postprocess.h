@@ -2,10 +2,11 @@
 #define POSTPROCESS_H
 
 #include <vector>
-#include "sctructures.h"
+#include "structures.h"
 
 // структура для представления кандидата обнаружения
-struct Candidate {
+struct Candidate
+{
     float x1, y1, x2, y2;
     float score;
     int classId;
@@ -13,8 +14,8 @@ struct Candidate {
 
 // функция для gpu постобработки
 std::vector<Detection> retinanet_postprocess_gpu(
-    const float* d_cls_logits,
-    const float* d_bbox_deltas,
+    const float *d_cls_logits,
+    const float *d_bbox_deltas,
     int numAnchors,
     int numClasses,
     int inputW,
@@ -24,7 +25,10 @@ std::vector<Detection> retinanet_postprocess_gpu(
     float confThreshold,
     float nmsThreshold,
     int maxCandidates,
-    int topK
-);
+    int topK,
+    cudaStream_t stream = nullptr);
+
+// функция для освобождения глобального потока
+extern "C" void cleanup_postprocess_stream();
 
 #endif
