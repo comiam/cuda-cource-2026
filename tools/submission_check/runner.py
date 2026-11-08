@@ -9,6 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from .diagnostics import redact_secrets
 from .formatting import format_submission
 from .github import GitHubClient, GitHubError
 from .models import Issue, PRContext, context_fingerprint
@@ -56,8 +57,9 @@ def _student_issues(files, repo_files, path, lab, formatter, root):
             format_files = {name: data for name, data in files.items() if name != path + '/README.md'}
     try:
         issues.extend(formatter(format_files, path, root))
-    except Exception:
-        issues.append(Issue('tool', 'Unable to complete formatting checks'))
+    except Exception as exc:
+        message = redact_secrets(f'Форматирование ({type(exc).__name__}): {exc}')
+        issues.append(Issue('tool', message[:3000], path))
     return issues
 
 
@@ -89,9 +91,10 @@ def run_ci(
     except GitHubError as exc:
         result['state'] = 'error'
         result['issues'] = [asdict(Issue('tool', str(exc)[:512]))]
-    except Exception:
+    except Exception as exc:
         result['state'] = 'error'
-        result['issues'] = [asdict(Issue('tool', 'Unable to complete submission check'))]
+        message = redact_secrets(f'Проверка PR #{number} ({type(exc).__name__}): {exc}')
+        result['issues'] = [asdict(Issue('tool', message[:3000]))]
     return result
 
 
@@ -163,15 +166,15 @@ def _local_files(root: Path, path: str):
                             os.close(filefd)
                     else:
                         issues.append(Issue('structure', 'Special files are forbidden in a submission', full))
-                except OSError:
-                    issues.append(Issue('tool', 'Cannot safely read submission entry', full))
+                except OSError as exc:
+                    issues.append(Issue('tool', f'Не удалось прочитать файл: {exc}', full))
         visit(fd, path)
         if count > MAX_SUBMISSION_FILES:
             issues.append(Issue('structure', f'Submission exceeds {MAX_SUBMISSION_FILES} files', path))
         if total > MAX_SUBMISSION_BYTES:
             issues.append(Issue('structure', f'Submission exceeds {MAX_SUBMISSION_BYTES} bytes', path))
-    except OSError:
-        issues.append(Issue('structure', 'Submission directory is missing or is a symlink', path))
+    except OSError as exc:
+        issues.append(Issue('structure', f'Не удалось открыть каталог: {exc}', path))
     finally:
         for fd in reversed(descriptors):
             os.close(fd)
@@ -201,5 +204,6 @@ def run_local(
         issues.extend(_student_issues(files, repo_files, submission_path, lab,
                                       format_function or format_submission, Path(trusted_root)))
         return _finish(result, issues)
-    except Exception:
-        return _finish(result, [Issue('tool', 'Unable to complete local submission check')])
+    except Exception as exc:
+        message = redact_secrets(f'Локальная проверка ({type(exc).__name__}): {exc}')
+        return _finish(result, [Issue('tool', message[:3000], submission_path)])

@@ -30,8 +30,21 @@ def _http_transport(method: str, url: str, headers: dict[str, str], body: bytes 
     try:
         with build_opener(_NoRedirect()).open(request, timeout=30) as response:
             data = response.read(_MAX_RESPONSE_BYTES + 1)
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        raise GitHubError(f"GitHub request failed: {exc}") from exc
+    except HTTPError as exc:
+        detail = str(exc.reason)
+        try:
+            body = exc.read(16384)
+            payload = json.loads(body)
+            if isinstance(payload, dict) and isinstance(payload.get("message"), str):
+                detail = payload["message"][:1000]
+        except (OSError, ValueError, UnicodeError):
+            pass
+        finally:
+            exc.close()
+        endpoint = urlsplit(url).path
+        raise GitHubError(f"GitHub {method} {endpoint}: HTTP {exc.code}: {detail}") from exc
+    except (URLError, TimeoutError, OSError) as exc:
+        raise GitHubError(f"GitHub {method} {urlsplit(url).path}: {exc}") from exc
     if len(data) > _MAX_RESPONSE_BYTES:
         raise GitHubError("GitHub response exceeded the size limit")
     try:
@@ -92,8 +105,9 @@ class GitHubClient:
             headers["Content-Type"] = "application/json"
         try:
             return self._transport(method, "https://api.github.com" + path, headers, body)
-        except GitHubError:
-            raise
+        except GitHubError as exc:
+            message = str(exc).replace(self._token, "[REDACTED]")
+            raise GitHubError(message) from exc
         except (OSError, TimeoutError, ValueError) as exc:
             raise GitHubError(f"GitHub request failed: {exc}") from exc
 
