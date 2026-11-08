@@ -1,0 +1,7 @@
+# Trusted runtime only. Resolve and hash into requirements.txt with Python 3.12.
+clang-format>=18,<19
+cmakelang>=0.6.13,<0.7
+markdown-it-py>=3,<5
+pymarkdownlnt>=0.9,<1
+PyYAML>=6,<7
+ruff>=0.9,<1

@@ -1,0 +1,16 @@
+{
+  "plugins": {
+    "selectively_enable_rules": true,
+    "md001": {"enabled": true},
+    "md009": {"enabled": true},
+    "md010": {"enabled": true},
+    "md012": {"enabled": true},
+    "md013": {"enabled": false},
+    "md022": {"enabled": true},
+    "md025": {"enabled": true},
+    "md031": {"enabled": true},
+    "md032": {"enabled": true},
+    "md040": {"enabled": true},
+    "md047": {"enabled": true}
+  }
+}

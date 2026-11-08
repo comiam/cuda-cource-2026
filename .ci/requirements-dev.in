@@ -1,0 +1,3 @@
+# Local-only tests; not installed or invoked by the GitHub workflow.
+-r requirements.in
+pytest>=8,<10
