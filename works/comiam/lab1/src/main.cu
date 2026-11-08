@@ -10,7 +10,11 @@ struct DeviceBuffer {
     ~DeviceBuffer() { cudaFree(data); }
 };
 
-bool cuda_ok(cudaError_t status) {
+bool cuda_ok(cudaError_t status) 
+
+
+
+{
     if (status != cudaSuccess) {
         std::cerr << cudaGetErrorString(status) << '\n';
         return false;
