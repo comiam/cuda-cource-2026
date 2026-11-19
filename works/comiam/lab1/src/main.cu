@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
         std::cerr << "Invalid input header\n";
         return 2;
     }
+
     for (int i = 0; i < count; ++i) {
         float x = 0;
         float y = 0;
