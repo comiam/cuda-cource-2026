@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     std::ofstream out(output);
     for (int i = 0; i < count && out; ++i) {
         // Deliberately wrong: ReLU cannot produce a negative result.
-        out << "0 0 -1\n";
+        out << "0 0 -2\n";
     }
     out.close();
     if (!out) {
