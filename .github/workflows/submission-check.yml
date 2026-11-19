@@ -6,16 +6,30 @@ on:
 
 permissions: {}
 
+env:
+  CI_TRUSTED_SHA: ${{ github.workflow_sha }}
+  PYTHONPATH: ${{ github.workspace }}/lab-runner
+  PYTHONSAFEPATH: "1"
+
 concurrency:
   group: submission-static-${{ github.event.pull_request.number }}
-  # Serialize status writers for one PR; the next run reads current metadata.
   cancel-in-progress: false
 
 jobs:
   pending:
     name: Подготовка PR
-    timeout-minutes: 5
+    if: ${{ github.ref_protected && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    timeout-minutes: 10
     runs-on: ubuntu-24.04
+    container:
+      image: docker.io/library/ubuntu:24.04@sha256:77eb101c607d6e3d4f5ad0c8a02c2136c689b98aba1f359e6502ba517e5c57ec
+      options: --cap-add=NET_ADMIN
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI_EGRESS_ISOLATED_RUNNER: "1"
+      CI_EGRESS_JOB_CONTAINER: "1"
     permissions:
       contents: read
       pull-requests: read
@@ -25,25 +39,59 @@ jobs:
       head_sha: ${{ steps.pending.outputs.head_sha }}
       fingerprint: ${{ steps.pending.outputs.fingerprint }}
     steps:
-      - name: Загрузка правил курса
+      - name: Доверенный bootstrap контейнера до checkout и guard
+        shell: sh
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates git python3 python3-venv nftables sudo libstdc++6
+      - &course_checkout
+        name: Загрузка доверенного коммита курса
+        id: course_checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.workflow_sha }}
+          path: course
           persist-credentials: false
-      - name: Фиксация версии правил
-        id: trusted
-        shell: bash
+      - &runner_pin
+        name: Проверка коммита курса и SHA раннера
+        id: runner_pin
         run: |
-          sha=$(git rev-parse HEAD)
+          [[ $(git -C course rev-parse HEAD) == "$CI_TRUSTED_SHA" ]]
+          lock=course/.github/lab-runner.lock
+          [[ -f "$lock" && ! -L "$lock" && $(wc -c < "$lock") -eq 41 ]]
+          IFS= read -r sha < "$lock"
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
-      - name: Начало проверки PR
+      - &runner_checkout
+        name: Загрузка закреплённого приватного раннера
+        id: runner_checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: comiam/cuda-cource-lab-runner
+          ref: ${{ steps.runner_pin.outputs.sha }}
+          path: lab-runner
+          token: ${{ secrets.LAB_RUNNER_READ_TOKEN }}
+          persist-credentials: false
+      - &verify_runner
+        name: Проверка загруженного коммита раннера
+        id: verify_runner
+        env:
+          EXPECTED_RUNNER_SHA: ${{ steps.runner_pin.outputs.sha }}
+        run: '[[ $(git -C lab-runner rev-parse HEAD) == "$EXPECTED_RUNNER_SHA" ]]'
+      - name: Закрытие исходящей сети
+        id: network
+        env:
+          CI_EGRESS_ALLOWED_ENDPOINTS: ${{ vars.CI_EGRESS_ALLOWED_ENDPOINTS }}
+        run: python3 -m tools.ci_network start --directory .ci-network
+      - name: Неизменяемые данные восстановления PR
         id: pending
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python3 -m tools.submission_check.report pending --pr-number "$PR_NUMBER" --state-file .ci-state/state.json
-      - name: Сохранение данных PR
+        run: python3 -m tools.submission_check.report pending --seed-only --pr-number "$PR_NUMBER" --state-file .ci-state/state.json
+      - name: Сохранение seed до pending
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: submission-state-${{ github.run_id }}-${{ github.run_attempt }}
@@ -51,27 +99,56 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 1
+      - name: Публикация принадлежащего запуску pending
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 -m tools.submission_check.report start --pr-number "$PR_NUMBER" --state-file .ci-state/state.json
+      - name: Снятие только собственного сетевого фильтра
+        if: ${{ always() && steps.verify_runner.outcome == 'success' }}
+        run: python3 -m tools.ci_network stop --directory .ci-network
 
   validate:
     name: Проверка сдачи
     timeout-minutes: 15
     needs: pending
     runs-on: ubuntu-24.04
+    container:
+      image: docker.io/library/ubuntu:24.04@sha256:77eb101c607d6e3d4f5ad0c8a02c2136c689b98aba1f359e6502ba517e5c57ec
+      options: --cap-add=NET_ADMIN
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI_EGRESS_ISOLATED_RUNNER: "1"
+      CI_EGRESS_JOB_CONTAINER: "1"
     permissions:
       contents: read
       pull-requests: read
     steps:
-      - name: Загрузка зафиксированной версии правил
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ needs.pending.outputs.trusted_sha }}
-          persist-credentials: false
+      - name: Доверенный bootstrap контейнера до checkout и guard
+        shell: sh
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates git python3 python3-venv nftables sudo libstdc++6
+      - *course_checkout
+      - *runner_pin
+      - *runner_checkout
+      - *verify_runner
       - name: Подготовка Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
-      - name: Установка инструментов проверки
-        run: python -m pip install --index-url https://pypi.org/simple --require-hashes -r .ci/requirements.txt
+      - name: Установка доверенных инструментов проверки
+        run: |
+          python -m pip install --index-url https://pypi.org/simple --require-hashes -r lab-runner/.ci/requirements.txt
+      - name: Закрытие сети до чтения сдачи
+        id: network
+        env:
+          CI_EGRESS_ALLOWED_ENDPOINTS: ${{ vars.CI_EGRESS_ALLOWED_ENDPOINTS }}
+        run: python3 -m tools.ci_network start --directory .ci-network
       - name: Проверка структуры, README и форматирования
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -80,9 +157,9 @@ jobs:
           FINGERPRINT: ${{ needs.pending.outputs.fingerprint }}
         run: |
           mkdir -p .ci-result
-          python -m tools.submission_check ci --pr-number "$PR_NUMBER" --expected-head-sha "$HEAD_SHA" --expected-fingerprint "$FINGERPRINT" --output .ci-result/result.json
+          python -m tools.submission_check ci --pr-number "$PR_NUMBER" --expected-head-sha "$HEAD_SHA" --expected-fingerprint "$FINGERPRINT" --trusted-root course --output .ci-result/result.json
       - name: Сохранение замечаний
-        if: ${{ always() }}
+        if: ${{ always() && steps.network.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: submission-result-${{ github.run_id }}-${{ github.run_attempt }}
@@ -90,48 +167,73 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 1
+      - name: Снятие только собственного сетевого фильтра
+        if: ${{ always() && steps.verify_runner.outcome == 'success' }}
+        run: python3 -m tools.ci_network stop --directory .ci-network
 
   report:
     name: Результат проверки
-    timeout-minutes: 5
-    if: ${{ always() }}
+    timeout-minutes: 10
+    if: ${{ always() && github.ref_protected && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     needs: [pending, validate]
     runs-on: ubuntu-24.04
+    container:
+      image: docker.io/library/ubuntu:24.04@sha256:77eb101c607d6e3d4f5ad0c8a02c2136c689b98aba1f359e6502ba517e5c57ec
+      options: --cap-add=NET_ADMIN
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI_EGRESS_ISOLATED_RUNNER: "1"
+      CI_EGRESS_JOB_CONTAINER: "1"
     permissions:
       contents: read
       pull-requests: read
+      actions: read
       statuses: write
     steps:
-      - name: Загрузка зафиксированной версии правил
-        if: ${{ needs.pending.result == 'success' }}
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ needs.pending.outputs.trusted_sha }}
-          persist-credentials: false
-      - name: Загрузка данных PR
-        if: ${{ needs.pending.result == 'success' }}
+      - name: Доверенный bootstrap контейнера до checkout и guard
+        shell: sh
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates git python3 python3-venv nftables sudo libstdc++6
+      - *course_checkout
+      - *runner_pin
+      - *runner_checkout
+      - *verify_runner
+      - name: Закрытие исходящей сети
+        id: network
+        env:
+          CI_EGRESS_ALLOWED_ENDPOINTS: ${{ vars.CI_EGRESS_ALLOWED_ENDPOINTS }}
+        run: python3 -m tools.ci_network start --directory .ci-network
+      - name: Проверка происхождения seed и результата
+        id: artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m tools.submission_check.artifacts --kinds submission-state submission-result --required-kind submission-state
+      - name: Загрузка данных восстановления
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: submission-state-${{ github.run_id }}-${{ github.run_attempt }}
+          artifact-ids: ${{ steps.artifacts.outputs.submission_state_artifact_id }}
           path: .ci-state
+          merge-multiple: true
       - name: Загрузка результата проверки
-        if: ${{ needs.pending.result == 'success' }}
+        if: ${{ steps.artifacts.outputs.submission_result_artifact_id != '' }}
         continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: submission-result-${{ github.run_id }}-${{ github.run_attempt }}
+          artifact-ids: ${{ steps.artifacts.outputs.submission_result_artifact_id }}
           path: .ci-result
-      - name: Публикация статуса и ошибок
-        if: ${{ always() && needs.pending.result == 'success' }}
+          merge-multiple: true
+      - name: Завершение только собственного статуса PR
+        if: ${{ always() && steps.network.outcome == 'success' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          VALIDATION_OUTCOME: ${{ needs.validate.result }}
+          VALIDATION_OUTCOME: ${{ steps.artifacts.outputs.submission_result_outcome || needs.validate.result }}
         run: python3 -m tools.submission_check.report finish --pr-number "$PR_NUMBER" --state-file .ci-state/state.json --result-file .ci-result/result.json --validation-outcome "$VALIDATION_OUTCOME"
-      - name: Ошибка подготовки PR
-        if: ${{ always() && needs.pending.result != 'success' }}
-        env:
-          PREPARATION_OUTCOME: ${{ needs.pending.result }}
-        run: |
-          echo "::error title=Подготовка PR::Этап подготовки завершился со статусом $PREPARATION_OUTCOME. Причина указана в job «Подготовка PR»."
-          exit 1
+      - name: Снятие только собственного сетевого фильтра
+        if: ${{ always() && steps.verify_runner.outcome == 'success' }}
+        run: python3 -m tools.ci_network stop --directory .ci-network
