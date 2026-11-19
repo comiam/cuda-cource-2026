@@ -23,6 +23,7 @@ int main(int argc, char **argv) {
             valid = false;
         }
     }
+
     if (!valid || input == nullptr || output == nullptr) {
         std::cerr << "Invalid arguments\n";
         return 2;
