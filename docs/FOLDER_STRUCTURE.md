@@ -54,10 +54,10 @@ set_target_properties(submission PROPERTIES CXX_STANDARD 17 CUDA_STANDARD 17)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target submission
 ./build/submission --help
-./build/submission --input data/example --output results
+./build/submission --input data/example.txt --output result.txt
 ```
 
-Режимы необязательного `--mode` приведены в [правилах запуска](SUBMISSION_CONTRACT.md#cli-программы). Форматы входов и результатов опишите в README.
+Режимы `--mode`, форматы входа и результата приведены в [задании своей лабораторной](../works/README.md). Укажите их и в своём README.
 
 ## Отчёт
 
@@ -69,9 +69,9 @@ cmake --build build --target submission
 
 Добавляйте исходники, отчёт и небольшие тестовые примеры. Сборочные файлы, `submission`, библиотеки, виртуальные окружения, датасеты, большие веса и сырые профили оставляйте вне Git. Симлинки и submodules для сдачи не допускаются.
 
-Лимиты: 10 MiB на файл, 25 MiB и 1000 файлов на лабораторную. Небольшие PNG и вспомогательные данные разрешены.
+Лимиты: 10 MiB на файл, 25 MiB и 1000 файлов на лабораторную, до 1000 изменённых файлов в PR. Небольшие PNG и вспомогательные данные разрешены.
 
-Свои тесты храните в `works/<login>/lab<N>/tests/`. Правило `.gitignore` для тестов обвеса касается только корневой папки `tests/submission_check/`.
+Свои тесты можно хранить в `works/<login>/lab<N>/tests/`.
 
 ## Форматирование
 

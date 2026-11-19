@@ -2,7 +2,7 @@
 
 Создайте работу в `works/<github-login>/lab<N>/`. Правила сборки и запуска описаны в [SUBMISSION_CONTRACT.md](SUBMISSION_CONTRACT.md), структура папок — в [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md).
 
-Ниже шаблон для Lab 1. Сохраните разделы, замените примеры путей своими и заполните отчёт по результатам работы.
+Ниже шаблон для Lab 1. Сохраните разделы, замените примеры путей своими и заполните отчёт по результатам работы. Форматы входа, выхода и примеры ищите в [задании своей лабораторной](../works/README.md).
 
 ````markdown
 # Lab 1: Vector Operations and Activations — Векторные операции и активации
@@ -30,8 +30,8 @@ cmake --build build --target submission
 
 ```bash
 ./build/submission --help
-./build/submission --input data/example --output results/coalesced
-./build/submission --input data/example --output results/noncoalesced --mode noncoalesced
+./build/submission --input data/example.txt --output coalesced.txt
+./build/submission --input data/example.txt --output noncoalesced.txt --mode noncoalesced
 ```
 
 Оба режима выполняют add, SAXPY и ReLU. Опишите входы, формат результата, коэффициент SAXPY и остальные аргументы программы.
@@ -44,11 +44,11 @@ cmake --build build --target submission
 
 Назовите библиотеку и функции эталона, способ генерации входов, seed и допуски. Для SAXPY используйте одинаковый исходный y в своём ядре и эталоне.
 
-| Операция  | Эталон          | Размер    | Особенности входа | Максимальная ошибка | Результат |
-| --------- | --------------- | --------- | ----------------- | ------------------- | --------- |
-| Заполнить | Указать функцию | Заполнить | Заполнить         | Измерить            | Проверить |
+| Тест-кейс                    | Ожидалось                          | Получилось                                          |
+| ---------------------------- | ---------------------------------- | --------------------------------------------------- |
+| Укажите вход, размер и режим | Численный результат или код ошибки | Ваш результат и, где применимо, максимальная ошибка |
 
-Проверьте размеры меньше блока и не кратные ему, нули и значения разных знаков. Опишите поведение на пустом входе и при неверных аргументах.
+Проверьте оба режима, размер меньше блока и не кратный ему, нули и значения разных знаков. За основу возьмите пример из задания.
 
 ## Результаты
 
@@ -77,8 +77,8 @@ cmake --build build --target submission
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target submission
-./build/submission --input data/example --output results/coalesced
-./build/submission --input data/example --output results/noncoalesced --mode noncoalesced
+./build/submission --input data/example.txt --output coalesced.txt
+./build/submission --input data/example.txt --output noncoalesced.txt --mode noncoalesced
 ```
 ````
 
