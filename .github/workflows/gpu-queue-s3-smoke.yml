@@ -1,0 +1,39 @@
+name: GPU queue S3 smoke
+
+on:
+  push:
+    branches: [gpu-queue-s3-smoke]
+
+permissions: {}
+
+jobs:
+  exchange:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Exchange a synthetic JSON object with the GPU host
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.GPU_QUEUE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.GPU_QUEUE_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ru-central1
+          AWS_EC2_METADATA_DISABLED: 'true'
+          AWS_MAX_ATTEMPTS: '2'
+        run: |
+          endpoint=https://storage.yandexcloud.net
+          bucket=cuda-submissions
+          name="smoke-${GITHUB_RUN_ID}.json"
+          aws_s3=(aws --no-cli-pager --endpoint-url "$endpoint" --cli-connect-timeout 10 --cli-read-timeout 15 s3api)
+          test -n "$AWS_ACCESS_KEY_ID" && test -n "$AWS_SECRET_ACCESS_KEY" || { echo 'Missing queue credentials'; exit 1; }
+          umask 077
+          if [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]; then
+            printf '{"smoke_id":"%s","from":"actions"}\n' "$GITHUB_RUN_ID" > "$RUNNER_TEMP/s3-smoke-request.json"
+            "${aws_s3[@]}" put-object --bucket "$bucket" --key "requests/$name" \
+              --body "$RUNNER_TEMP/s3-smoke-request.json" --content-type application/json >/dev/null
+            printf 'Request uploaded: requests/%s\n' "$name"
+          else
+            "${aws_s3[@]}" get-object --bucket "$bucket" --key "results/$name" \
+              "$RUNNER_TEMP/s3-smoke-result.json" >/dev/null
+            printf '{"smoke_id":"%s","from":"worker"}\n' "$GITHUB_RUN_ID" | cmp - "$RUNNER_TEMP/s3-smoke-result.json"
+            printf 'Worker response verified: results/%s\n' "$name"
+          fi
