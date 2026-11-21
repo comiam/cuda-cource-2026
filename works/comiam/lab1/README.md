@@ -1,50 +1,64 @@
-# Проверка CI: неверный результат
+# Lab 1 — контрольная сдача для проверки CI
 
 ## Описание
 
-Синтетическая заглушка Lab 1, не решение лабораторной. Она читает вход и записывает файл нужного формата, но намеренно выдаёт отрицательный результат ReLU.
+Рабочая тестовая сдача для проверки положительного результата GPU CI. CUDA-ядро вычисляет сложение, SAXPY и ReLU в обоих режимах. Это проверка инфраструктуры, а не отчёт о производительности.
 
 ## Окружение
 
-Linux, CUDA и CMake 3.20 или новее. Для локальной проверки поведения годится обычный компилятор C++.
+Linux, CUDA с поддержкой C++17 и CMake 3.20 или новее. Для запуска нужен GPU NVIDIA.
 
 ## Компиляция
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target submission
 ```
 
 ## Запуск
 
 ```bash
-./build/submission --input example.txt --output result.txt --mode coalesced
+./build/submission --help
+./build/submission --input example.txt --output coalesced.txt
+./build/submission --input example.txt --output noncoalesced.txt --mode noncoalesced
 ```
+
+Без `--mode` используется `coalesced`. Для `N=0` программа создаёт пустой выходной файл и возвращает `0` без запуска ядра.
 
 ## Проверка корректности
 
-Для входа `1 0.5` и пары `-3 2` ожидается `-1 0.5 0`. Заглушка записывает `0 0 -2` и успешно завершает работу. Оба режима дают такую же ошибку.
+Для открытого примера из задания ожидаем одинаковые значения в обоих режимах:
+
+```text
+-1 0.5 0
+-4 -4.5 1
+4.5 2.5 4
+```
+
+Операции выполняются в FP32, для SAXPY используется FMA. Индекс выходной тройки совпадает с индексом входной пары.
 
 ## Результаты
 
-Ожидается, что GPU-проверка сообщит о неверном ответе, а не об ошибке записи или формата файла.
+Контроль этой сдачи — статическая проверка и GPU-вердикт в тестовом PR. Сравнение производительности не входит в этот прогон.
 
 ## Выводы
 
-Проверка должна отличать неправильные числа от сбоя при запуске программы.
+В коалесцированном режиме соседние потоки читают соседние элементы. В некоалесцированном — потоки варпа обращаются к элементам с шагом восемь внутри блока. Оба режима должны записать одинаковый результат.
 
 ## Воспроизводимость
 
 ### Данные
 
-Создайте `example.txt` с заголовком `1 0.5` и парой `-3 2`.
+Открытый пример Lab 1: три пары чисел с положительными и отрицательными компонентами.
 
 ### Полный запуск
 
 ```bash
-printf '1 0.5\n-3 2\n' > example.txt
-cmake -S . -B build
+printf '3 0.5\n-3 2\n1 -5\n4 0.5\n' > example.txt
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target submission
-./build/submission --input example.txt --output result.txt --mode coalesced
-cat result.txt
+./build/submission --input example.txt --output coalesced.txt
+./build/submission --input example.txt --output noncoalesced.txt --mode noncoalesced
+cmp coalesced.txt noncoalesced.txt
+cat coalesced.txt
 ```
