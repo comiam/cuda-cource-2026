@@ -1,4 +1,4 @@
-name: GPU queue S3 smoke
+name: GPU queue S3 permissions smoke
 
 on:
   push:
@@ -7,119 +7,37 @@ on:
 permissions: {}
 
 jobs:
-  exchange:
-    if: ${{ github.repository == 'comiam/cuda-cource-2026' && github.actor == 'comiam' }}
+  permissions:
+    if: ${{ github.repository == 'comiam/cuda-cource-2026' && github.actor == 'comiam' && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
-    env:
-      RUNNER_SHA: 770a01afe8430ba78565e591de30566bc1df1126
-      PYTHONPATH: ${{ github.workspace }}/lab-runner
-      PYTHONSAFEPATH: '1'
     steps:
-      - name: Check out trusted wire helpers
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: comiam/cuda-cource-lab-runner
-          ref: ${{ env.RUNNER_SHA }}
-          path: lab-runner
-          token: ${{ secrets.LAB_RUNNER_READ_TOKEN }}
-          persist-credentials: false
-      - name: Prepare a synthetic Lab 1 request
-        id: request
+      - name: Verify Actions cannot write GPU results
         shell: bash
         env:
-          GPU_RUNTIME: ${{ vars.GPU_CI_RUNTIME_REVISION }}
-        run: |
-          test "$(git -C lab-runner rev-parse HEAD)" = "$RUNNER_SHA"
-          umask 077
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import os
-          from dataclasses import asdict
-          from pathlib import Path
-
-          from tools.gpu_check.models import ExecutionIdentity, SourceFile
-          from tools.gpu_check.prepare import source_digest
-          from tools.gpu_check.wire import GPUJob, decode_request, encode_job
-          from tools.submission_check.identities import execution_request_id
-
-          sources = (
-              SourceFile('CMakeLists.txt', '100644', b'''cmake_minimum_required(VERSION 3.20)
-          project(synthetic_smoke LANGUAGES CXX CUDA)
-          add_executable(submission src/main.cu)
-          '''),
-              SourceFile('src/main.cu', '100644', br'''#include <fstream>
-          #include <iostream>
-          #include <string>
-          int main(int argc, char** argv) {
-              if (argc == 2 && std::string(argv[1]) == "--help") {
-                  std::cout << "submission --input FILE --output FILE [--mode MODE]\n";
-                  return 0;
-              }
-              std::string input, output;
-              for (int i = 1; i + 1 < argc; i += 2) {
-                  std::string flag = argv[i];
-                  if (flag == "--input") input = argv[i + 1];
-                  if (flag == "--output") output = argv[i + 1];
-              }
-              std::ifstream in(input);
-              int n = 0;
-              float alpha;
-              if (output.empty() || !(in >> n >> alpha) || n < 0) {
-                  std::cerr << "Invalid input\n";
-                  return 2;
-              }
-              std::ofstream out(output);
-              for (int i = 0; i < n; ++i) out << "0 0 -1\n";
-              out.close();
-              return out ? 0 : 1;
-          }
-          '''),
-          )
-          repo, sha = os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA']
-          identity = ExecutionIdentity(repo, int(os.environ['GITHUB_ACTOR_ID']), 'works/comiam/lab1',
-                                       1, source_digest(sources), os.environ['GPU_RUNTIME'])
-          # The retry reads the original result; it does not enqueue a new request.
-          request_id = execution_request_id(repo, 73, sha, asdict(identity), int(os.environ['GITHUB_RUN_ID']), 1)
-          raw = encode_job(GPUJob(request_id, repo, 73, sha, identity, sources))
-          decode_request(raw)
-          (Path(os.environ['RUNNER_TEMP']) / 's3-smoke-request.json').write_bytes(raw)
-          print(f'id={request_id}')
-          PY
-      - name: Upload once or verify the worker's response
-        shell: bash
-        env:
-          REQUEST_ID: ${{ steps.request.outputs.id }}
           AWS_ACCESS_KEY_ID: ${{ secrets.GPU_QUEUE_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.GPU_QUEUE_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ru-central1
           AWS_EC2_METADATA_DISABLED: 'true'
-          AWS_MAX_ATTEMPTS: '2'
+          AWS_MAX_ATTEMPTS: '1'
         run: |
-          [[ "$REQUEST_ID" =~ ^[0-9a-f]{64}$ ]]
           umask 077
           bucket=cuda-submissions
-          aws_s3=(aws --no-cli-pager --endpoint-url https://storage.yandexcloud.net --cli-connect-timeout 10 --cli-read-timeout 15 s3api)
-          if [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]; then
-            "${aws_s3[@]}" put-object --bucket "$bucket" --key "requests/v1/$REQUEST_ID.json" \
-              --body "$RUNNER_TEMP/s3-smoke-request.json" --content-type application/json >/dev/null
-            printf 'Lab 1 queued: %s\n' "$REQUEST_ID"
+          id=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+          key="results/v1/$id.json"
+          aws_s3=(aws --no-cli-pager --no-paginate --endpoint-url https://storage.yandexcloud.net --cli-connect-timeout 10 --cli-read-timeout 15 s3api)
+          visible=$("${aws_s3[@]}" list-objects-v2 --bucket "$bucket" --prefix "$key" --max-keys 1 --query 'Contents[0].Key' --output text)
+          [[ "$visible" == None ]] || { echo 'Probe key already exists; no write attempted'; exit 1; }
+          printf '{}\n' > "$RUNNER_TEMP/queue-permissions-probe.json"
+          if "${aws_s3[@]}" put-object --bucket "$bucket" --key "$key" \
+              --body "$RUNNER_TEMP/queue-permissions-probe.json" --content-type application/json \
+              > /dev/null 2> "$RUNNER_TEMP/queue-permissions-error"; then
+            printf 'Unexpected Actions write permission: %s\n' "$key"
+            exit 1
+          fi
+          if grep -Eq '\((AccessDenied|403)\) when calling the PutObject operation' "$RUNNER_TEMP/queue-permissions-error"; then
+            echo 'Actions write to results denied as expected'
           else
-            "${aws_s3[@]}" get-object --bucket "$bucket" --key "results/v1/$REQUEST_ID.json" \
-              --range bytes=0-131072 "$RUNNER_TEMP/s3-smoke-result.json" >/dev/null
-            python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          from tools.gpu_check.wire import MAX_RESPONSE_BYTES, decode_request, parse_json, validate_result
-
-          root = Path(os.environ['RUNNER_TEMP'])
-          job = decode_request((root / 's3-smoke-request.json').read_bytes())
-          with (root / 's3-smoke-result.json').open('rb') as result_file:
-              result = validate_result(parse_json(result_file.read(MAX_RESPONSE_BYTES + 1), MAX_RESPONSE_BYTES), job)
-          failed = {mode['mode'] for mode in result['modes']
-                    if mode['state'] == 'failure' and mode['category'] == 'wrong_answer'}
-          if result['state'] != 'failure' or result['stage'] != 'tests' or failed != {'coalesced', 'noncoalesced'}:
-              raise SystemExit(f"Unexpected GPU verdict: {result['state']}/{result['stage']}")
-          print('Lab 1: both modes returned the expected wrong_answer verdict')
-          PY
+            echo 'Permission check inconclusive: S3 returned an error other than AccessDenied'
+            exit 1
           fi
