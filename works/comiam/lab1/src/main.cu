@@ -12,6 +12,7 @@ int main(int argc, char **argv) {
     const char *input = nullptr;
     const char *output = nullptr;
     bool valid = argc % 2 == 1;
+
     for (int i = 1; valid && i < argc; i += 2) {
         const std::string flag = argv[i];
         const std::string value = argv[i + 1];
