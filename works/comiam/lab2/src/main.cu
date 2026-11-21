@@ -1,4 +1,4 @@
-#error "Intentional Lab 2 CI smoke compilation failure"
+#error "Intentional compiler failure for the Lab 2 smoke test"
 
 #include <cuda_runtime.h>
 #if defined(LAB2_CUBLAS_REFERENCE)
