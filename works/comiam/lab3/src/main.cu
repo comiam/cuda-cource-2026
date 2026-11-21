@@ -196,3 +196,5 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
+
+// Re-run the unchanged Sobel implementation under the new report workflow.
