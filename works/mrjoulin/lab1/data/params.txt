@@ -1,0 +1,15 @@
+# Configuration for Lab 1 benchmark.
+# Number of elements for the large benchmark.
+n=16777216
+
+# SAXPY coefficient.
+alpha=2.0
+
+# RNG seed for reproducible inputs.
+seed=2026
+
+# Threads per block. 0 means sweep 64, 128, 256, 512, 1024.
+block_size=0
+
+# Repetitions after warmup.
+repeats=20

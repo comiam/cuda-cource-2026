@@ -1,0 +1,6 @@
+# Compact benchmark configuration: single block size.
+n=16777216
+alpha=2.0
+seed=2026
+block_size=256
+repeats=20
