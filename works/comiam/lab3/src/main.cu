@@ -186,10 +186,6 @@ int main(int argc, char **argv) {
         const Options options = parse(argc, argv);
         const Image image = read_png(options.input);
         auto result = filter(image, options.shared);
-        if (image.width >= 3 && image.height >= 3) {
-            auto &pixel = result[static_cast<std::size_t>(image.width) + 1];
-            pixel = pixel < 128 ? 255 : 0;
-        }
         write_png(options.output, image.width, image.height, result);
     } catch (const std::invalid_argument &error) {
         std::cerr << error.what() << '\n';
