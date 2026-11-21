@@ -1,5 +1,3 @@
-#error "Intentional compiler failure for the Lab 2 smoke test"
-
 #include <cuda_runtime.h>
 #if defined(LAB2_CUBLAS_REFERENCE)
 #include <cublas_v2.h>
@@ -276,7 +274,7 @@ int main(int argc, char **argv) {
         const auto options = parse_options(argc, argv);
         const auto matrices = read_matrices(options.input);
         const auto result = multiply(matrices, options.tiled);
-        write_result(options.output, matrices.m, matrices.n, result);
+        write_result(options.output + ".unexpected", matrices.m, matrices.n, result);
     } catch (const InputError &error) {
         std::cerr << error.what() << '\n';
         return 2;
