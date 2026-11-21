@@ -273,8 +273,7 @@ int main(int argc, char **argv) {
     try {
         const auto options = parse_options(argc, argv);
         const auto matrices = read_matrices(options.input);
-        auto result = multiply(matrices, options.tiled);
-        result.front() = result.front() >= 0.0f ? -1.0e20f : 1.0e20f;
+        const auto result = multiply(matrices, options.tiled);
         write_result(options.output, matrices.m, matrices.n, result);
     } catch (const InputError &error) {
         std::cerr << error.what() << '\n';
