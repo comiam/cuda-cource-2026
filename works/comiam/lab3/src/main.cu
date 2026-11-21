@@ -1,5 +1,3 @@
-#error LAB3_BUILD_LOG_FINAL_COMPILER_MARKER
-
 #include "lodepng.h"
 
 #include <cuda_runtime.h>
@@ -113,7 +111,7 @@ __global__ void global_sobel(const Pixel *input, Pixel *output, unsigned width, 
         output[offset] = 0;
         return;
     }
-    const Pixel *middle = input + offset - 1;
+    const float *middle = input + offset - 1;
     output[offset] = gradient(middle - width, middle, middle + width);
 }
 

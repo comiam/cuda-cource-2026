@@ -11,8 +11,3 @@ configure_file(vendor/lodepng.header "${CMAKE_CURRENT_BINARY_DIR}/lodepng.h" COP
 configure_file(vendor/lodepng.source "${CMAKE_CURRENT_BINARY_DIR}/lodepng.cpp" COPYONLY)
 add_executable(submission src/main.cu "${CMAKE_CURRENT_BINARY_DIR}/lodepng.cpp")
 target_include_directories(submission PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-
-# Bounded synthetic configure output for this isolated diagnostic smoke case.
-message(STATUS "LAB3_BUILD_LOG_BEGIN_MARKER")
-string(REPEAT "LAB3_BUILD_LOG_TEST_LINE_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" 1220 log_probe)
-message(STATUS "${log_probe}")
