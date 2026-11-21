@@ -1,0 +1,43 @@
+name: GPU queue S3 permissions smoke
+
+on:
+  push:
+    branches: [gpu-queue-s3-smoke]
+
+permissions: {}
+
+jobs:
+  permissions:
+    if: ${{ github.repository == 'comiam/cuda-cource-2026' && github.actor == 'comiam' && github.run_attempt == '1' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify Actions cannot write GPU results
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.GPU_QUEUE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.GPU_QUEUE_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ru-central1
+          AWS_EC2_METADATA_DISABLED: 'true'
+          AWS_MAX_ATTEMPTS: '1'
+        run: |
+          umask 077
+          bucket=cuda-submissions
+          id=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+          key="results/v1/$id.json"
+          aws_s3=(aws --no-cli-pager --no-paginate --endpoint-url https://storage.yandexcloud.net --cli-connect-timeout 10 --cli-read-timeout 15 s3api)
+          visible=$("${aws_s3[@]}" list-objects-v2 --bucket "$bucket" --prefix "$key" --max-keys 1 --query 'Contents[0].Key' --output text)
+          [[ "$visible" == None ]] || { echo 'Probe key already exists; no write attempted'; exit 1; }
+          printf '{}\n' > "$RUNNER_TEMP/queue-permissions-probe.json"
+          if "${aws_s3[@]}" put-object --bucket "$bucket" --key "$key" \
+              --body "$RUNNER_TEMP/queue-permissions-probe.json" --content-type application/json \
+              > /dev/null 2> "$RUNNER_TEMP/queue-permissions-error"; then
+            printf 'Unexpected Actions write permission: %s\n' "$key"
+            exit 1
+          fi
+          if grep -Eq '\((AccessDenied|403)\) when calling the PutObject operation' "$RUNNER_TEMP/queue-permissions-error"; then
+            echo 'Actions write to results denied as expected'
+          else
+            echo 'Permission check inconclusive: S3 returned an error other than AccessDenied'
+            exit 1
+          fi
