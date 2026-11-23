@@ -6,7 +6,7 @@
 
 Каждая из операций представлена в 2-х различных вариантах:  
 
-- В режиме `coalesced` соседние потоки warp читают соседние элементы. 
+- В режиме `coalesced` соседние потоки warp читают соседние элементы.
 - В `noncoalesced` те же самые операции идут с шагом 32. Т.е. `thread_idx = 0` обрабатывает индексы массива `[0, 32, 64, ...]`, `thread_idx = 1` `[1, 33, 65, ...]` и т.д.
 
 Эталон - те же выражения на CPU в FP32, с тем же исходным `y`. Отдельная библиотека не используется.
@@ -50,7 +50,7 @@ cmake --build build --target submission
 В некоалесцированном массив делится на плитки по 1024. Внутри плитки варп читает `0, 32, 64, …, 992`.
 Реализация некоалесцированного режима:
 
-```
+```cpp
 __device__ int nonCoalescedIndex(int tid, int n) {
     constexpr int warpSize = 32;
     constexpr int tile = warpSize * warpSize;
@@ -67,7 +67,7 @@ __device__ int nonCoalescedIndex(int tid, int n) {
 
 На GPU выделяются пять буферов: `x`, `y` и три результата. Буферы выделяются следующим образом:
 
-```
+```cpp
 cudaMalloc(&d_x, bytes);
 cudaMalloc(&d_y, bytes);
 cudaMalloc(&d_add, bytes);
@@ -77,14 +77,14 @@ cudaMalloc(&d_relu, bytes);
 
 Далее, `x` и `y` копируются на GPU с помощью стандартных функций:
 
-```
+```cpp
 cudaMemcpy(d_x, h_x.data(), bytes, cudaMemcpyHostToDevice);
-cudaMemcpy(d_y, h_h.data(), bytes, cudaMemcpyHostToDevice);
+cudaMemcpy(d_y, h_y.data(), bytes, cudaMemcpyHostToDevice);
 ```
 
 Все операции с CUDA обернуты в фукнцию-валидатор check:
 
-```
+```cpp
 void checkCuda(cudaError_t status) {
     if (status == cudaSuccess) {
         return;
@@ -107,7 +107,7 @@ void checkCuda(cudaError_t status) {
 
 ## Результаты
 
-В таблице приведены основные результаты из таблицы [data/bench.csv](data/bench.csv).
+В таблице приведены основные результаты замеров.
 
 Один прогревочный прогон, затем 10 повторов. Таймеры - `cudaEvent` с синхронизацией в конце интервала. В таблице приведены медианные результаты.  
 Полный цикл - один интервал H2D -> выполнение трех ядер -> D2H.  

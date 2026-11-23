@@ -39,7 +39,7 @@ struct Timings {
 
 namespace {
 
-void fail(int code, const std::string& message) {
+void fail(int code, const std::string &message) {
     std::cerr << message << '\n';
     std::exit(code);
 }
@@ -64,8 +64,8 @@ void printHelp() {
         << "Полный цикл в CSV — это H2D, три ядра и D2H. cudaMalloc в него не входит.\n";
 }
 
-int parseInt(const std::string& text) {
-    char* end = nullptr;
+int parseInt(const std::string &text) {
+    char *end = nullptr;
     const long value = std::strtol(text.c_str(), &end, 10);
     if (end == text.c_str() || *end != '\0') {
         fail(2, "ожидалось целое число, получено: " + text);
@@ -73,8 +73,8 @@ int parseInt(const std::string& text) {
     return static_cast<int>(value);
 }
 
-float parseFloat(const std::string& text) {
-    char* end = nullptr;
+float parseFloat(const std::string &text) {
+    char *end = nullptr;
     const float value = std::strtof(text.c_str(), &end);
     if (end == text.c_str() || *end != '\0') {
         fail(2, "ожидалось число, получено: " + text);
@@ -91,7 +91,7 @@ float medianOf(std::vector<float> values) {
     return 0.5f * (values[count / 2 - 1] + values[count / 2]);
 }
 
-void fillSynthetic(int n, std::vector<float>& h_x, std::vector<float>& h_y) {
+void fillSynthetic(int n, std::vector<float> &h_x, std::vector<float> &h_y) {
     h_x.assign(static_cast<size_t>(n), 0.f);
     h_y.assign(static_cast<size_t>(n), 0.f);
     for (int i = 0; i < n; ++i) {
@@ -107,9 +107,9 @@ void fillSynthetic(int n, std::vector<float>& h_x, std::vector<float>& h_y) {
     }
 }
 
-}
+} // namespace
 
-Args parseArgs(int argc, char** argv) {
+Args parseArgs(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--help") {
             printHelp();
@@ -167,8 +167,8 @@ Args parseArgs(int argc, char** argv) {
     return args;
 }
 
-void readInput(const std::string& path, int& n, float& alpha, std::vector<float>& h_x,
-               std::vector<float>& h_y) {
+void readInput(const std::string &path, int &n, float &alpha, std::vector<float> &h_x,
+               std::vector<float> &h_y) {
     std::ifstream in(path);
     if (!in) {
         fail(2, "не удалось открыть входной файл: " + path);
@@ -194,9 +194,9 @@ void checkCuda(cudaError_t status) {
     std::exit(1);
 }
 
-void run(const std::string& mode, const std::vector<float>& h_x, const std::vector<float>& h_y,
-         float alpha, int block, int repeats, std::vector<float>& h_add,
-         std::vector<float>& h_saxpy, std::vector<float>& h_relu, Timings& timings) {
+void run(const std::string &mode, const std::vector<float> &h_x, const std::vector<float> &h_y,
+         float alpha, int block, int repeats, std::vector<float> &h_add,
+         std::vector<float> &h_saxpy, std::vector<float> &h_relu, Timings &timings) {
     const int n = static_cast<int>(h_x.size());
     h_add.assign(static_cast<size_t>(n), 0.f);
     h_saxpy.assign(static_cast<size_t>(n), 0.f);
@@ -206,11 +206,11 @@ void run(const std::string& mode, const std::vector<float>& h_x, const std::vect
     }
 
     const size_t bytes = static_cast<size_t>(n) * sizeof(float);
-    float* d_x = nullptr;
-    float* d_y = nullptr;
-    float* d_add = nullptr;
-    float* d_saxpy = nullptr;
-    float* d_relu = nullptr;
+    float *d_x = nullptr;
+    float *d_y = nullptr;
+    float *d_add = nullptr;
+    float *d_saxpy = nullptr;
+    float *d_relu = nullptr;
     cudaEvent_t marks[6] = {};
     bool eventsCreated = false;
 
@@ -234,7 +234,7 @@ void run(const std::string& mode, const std::vector<float>& h_x, const std::vect
         }
     };
 
-    for (cudaEvent_t& ev : marks) {
+    for (cudaEvent_t &ev : marks) {
         check(cudaEventCreate(&ev));
     }
     eventsCreated = true;
@@ -333,16 +333,15 @@ void run(const std::string& mode, const std::vector<float>& h_x, const std::vect
         const float refSaxpy = alpha * h_x[index] + h_y[index];
         const float refRelu = h_x[index] > 0.f ? h_x[index] : 0.f;
         timings.maxErrAdd = std::max(timings.maxErrAdd, std::fabs(refAdd - h_add[index]));
-        timings.maxErrSaxpy =
-            std::max(timings.maxErrSaxpy, std::fabs(refSaxpy - h_saxpy[index]));
+        timings.maxErrSaxpy = std::max(timings.maxErrSaxpy, std::fabs(refSaxpy - h_saxpy[index]));
         timings.maxErrRelu = std::max(timings.maxErrRelu, std::fabs(refRelu - h_relu[index]));
     }
 
     release();
 }
 
-void writeOutput(const std::string& path, const std::vector<float>& h_add,
-                 const std::vector<float>& h_saxpy, const std::vector<float>& h_relu) {
+void writeOutput(const std::string &path, const std::vector<float> &h_add,
+                 const std::vector<float> &h_saxpy, const std::vector<float> &h_relu) {
     std::ofstream out(path);
     if (!out) {
         fail(1, "не удалось открыть файл результата: " + path);
@@ -354,8 +353,8 @@ void writeOutput(const std::string& path, const std::vector<float>& h_add,
     }
 }
 
-void writeCsv(const std::string& path, const std::string& mode, int n, int block,
-              const Timings& timings) {
+void writeCsv(const std::string &path, const std::string &mode, int n, int block,
+              const Timings &timings) {
     bool writeHeader = true;
     {
         std::ifstream existing(path);
@@ -374,14 +373,13 @@ void writeCsv(const std::string& path, const std::string& mode, int n, int block
         out << "mode,n,block,alloc_ms,h2d_ms,kernel_add_ms,kernel_saxpy_ms,kernel_relu_ms,"
                "kernel_ms,d2h_ms,full_ms,max_err_add,max_err_saxpy,max_err_relu\n";
     }
-    out << mode << ',' << n << ',' << block << ',' << timings.allocMs << ',' << timings.h2dMs
-        << ',' << timings.kernelAddMs << ',' << timings.kernelSaxpyMs << ','
-        << timings.kernelReluMs << ',' << timings.kernelMs << ',' << timings.d2hMs << ','
-        << timings.fullMs << ',' << timings.maxErrAdd << ',' << timings.maxErrSaxpy << ','
-        << timings.maxErrRelu << '\n';
+    out << mode << ',' << n << ',' << block << ',' << timings.allocMs << ',' << timings.h2dMs << ','
+        << timings.kernelAddMs << ',' << timings.kernelSaxpyMs << ',' << timings.kernelReluMs << ','
+        << timings.kernelMs << ',' << timings.d2hMs << ',' << timings.fullMs << ','
+        << timings.maxErrAdd << ',' << timings.maxErrSaxpy << ',' << timings.maxErrRelu << '\n';
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     Args args = parseArgs(argc, argv);
 
     int n = 0;
